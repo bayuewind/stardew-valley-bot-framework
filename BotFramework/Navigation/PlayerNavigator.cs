@@ -19,6 +19,8 @@ namespace BotFramework.Navigation
     /// </summary>
     public sealed class PlayerNavigator : IDisposable
     {
+        public const string BuildTag = "player-navigator:v3";
+
         private readonly IModHelper _helper;
         private readonly IMonitor _monitor;
 
@@ -41,6 +43,7 @@ namespace BotFramework.Navigation
             this._helper = helper ?? throw new ArgumentNullException(nameof(helper));
             this._monitor = monitor ?? throw new ArgumentNullException(nameof(monitor));
 
+            this._monitor.Log($"[Navigator] Init ({BuildTag})", LogLevel.Info);
             helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
             helper.Events.Player.Warped += this.OnWarped;
         }
