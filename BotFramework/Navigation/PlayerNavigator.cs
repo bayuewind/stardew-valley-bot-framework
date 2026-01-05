@@ -199,28 +199,33 @@ namespace BotFramework.Navigation
                 }
             }
 
-            // Stuck detection: if we have an active controller but player isn't changing tiles, retry.
-            Point nowTile = Game1.player.TilePoint;
-            if (nowTile == this._lastTile)
-                this._stuckTicks++;
-            else
-                this._stuckTicks = 0;
-            this._lastTile = nowTile;
+            // DISABLED: The original working code doesn't auto-progress on controller==null in UpdateTicked.
+            // It relies solely on Warped events to push the next step. Auto-progressing here causes a race:
+            // controller finishes -> we call NavigateNextStep() -> but Warped hasn't fired yet -> we might set a new controller -> warp never triggers.
+            // So we comment this out to match the working behavior: only Warped events advance cross-location steps.
 
-            // If controller finished or got cleared, keep progressing.
-            if (Game1.player.controller == null)
-            {
-                this.NavigateNextStep();
-                return;
-            }
+            // // Stuck detection: if we have an active controller but player isn't changing tiles, retry.
+            // Point nowTile = Game1.player.TilePoint;
+            // if (nowTile == this._lastTile)
+            //     this._stuckTicks++;
+            // else
+            //     this._stuckTicks = 0;
+            // this._lastTile = nowTile;
 
-            // Retry if stuck for ~2 seconds (120 ticks).
-            if (this._stuckTicks >= 120 && this._currentStepTarget.HasValue)
-            {
-                this._monitor.Log($"[Navigator] Detected stuck near ({this._currentStepTarget.Value.X},{this._currentStepTarget.Value.Y}) (warpStep={this._currentStepIsWarp}), retrying...", LogLevel.Warn);
-                this._stuckTicks = 0;
-                this.RetryCurrentStep();
-            }
+            // // If controller finished or got cleared, keep progressing.
+            // if (Game1.player.controller == null)
+            // {
+            //     this.NavigateNextStep();
+            //     return;
+            // }
+
+            // // Retry if stuck for ~2 seconds (120 ticks).
+            // if (this._stuckTicks >= 120 && this._currentStepTarget.HasValue)
+            // {
+            //     this._monitor.Log($"[Navigator] Detected stuck near ({this._currentStepTarget.Value.X},{this._currentStepTarget.Value.Y}) (warpStep={this._currentStepIsWarp}), retrying...", LogLevel.Warn);
+            //     this._stuckTicks = 0;
+            //     this.RetryCurrentStep();
+            // }
         }
 
         private void NavigateNextStep()
