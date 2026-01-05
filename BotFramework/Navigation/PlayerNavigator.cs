@@ -39,6 +39,10 @@ namespace BotFramework.Navigation
         private int _stuckTicks;
         private Point _lastTile;
 
+        // For edge-warp nudging: when warp is off-map, walk to edge then push out-of-bounds until Warped fires.
+        private int _edgeNudgeTicks;
+        private int _edgeNudgeDir;
+
         public bool IsNavigating => _active;
 
         public PlayerNavigator(IModHelper helper, IMonitor monitor)
@@ -124,6 +128,8 @@ namespace BotFramework.Navigation
             this._currentStepNextLocationKey = null;
             this._currentStepRetryCount = 0;
             this._stuckTicks = 0;
+            this._edgeNudgeTicks = 0;
+            this._edgeNudgeDir = -1;
         }
 
         private void OnWarped(object sender, WarpedEventArgs e)
@@ -132,6 +138,10 @@ namespace BotFramework.Navigation
                 return;
             if (!e.IsLocalPlayer)
                 return;
+
+            // Clear edge-warp nudge state (we've arrived in the new location).
+            this._edgeNudgeTicks = 0;
+            this._edgeNudgeDir = -1;
 
             if (this._route == null || this._route.Count == 0)
             {
@@ -157,6 +167,15 @@ namespace BotFramework.Navigation
                 return;
             if (!Context.IsWorldReady)
                 return;
+
+            // Edge-warp nudge: push out-of-bounds until Warped fires.
+            if (this._edgeNudgeTicks > 0)
+            {
+                Game1.player.faceDirection(this._edgeNudgeDir);
+                Game1.player.tryToMoveInDirection(this._edgeNudgeDir, isFarmer: true, 0, glider: false);
+                this._edgeNudgeTicks--;
+                return;
+            }
 
             // Completion check: at destination location and (optionally) at target tile.
             string curKey = this.GetLocationKey(Game1.player.currentLocation);
@@ -263,13 +282,43 @@ namespace BotFramework.Navigation
 
             // IMPORTANT:
             // Some warps are triggered by walking *off the map boundary* (warp coords can be outside map bounds).
-            // In those cases, clamping into the map will cause the player to stop one tile short and never warp.
-            // So we intentionally use the raw warp coordinates here (matching the working behavior in your original code).
+            // In those cases, PathFindController will walk to the edge and stop, never triggering the warp.
+            // Solution: if warp is off-map, walk to the edge tile, then push out-of-bounds until Warped fires.
+            Point warp = warpOrigin.Value;
+            int width = currentLoc.Map.Layers[0].LayerWidth;
+            int height = currentLoc.Map.Layers[0].LayerHeight;
+            bool outOfBounds = warp.X < 0 || warp.Y < 0 || warp.X >= width || warp.Y >= height;
+
             this._currentStepIsWarp = true;
             this._currentStepNextLocationKey = nextKey;
             this._currentStepRetryCount = 0;
-            this._monitor.Log($"[Navigator] Step: {this.GetLocationKey(currentLoc)} -> {nextKey} via warp tile ({warpOrigin.Value.X},{warpOrigin.Value.Y})", LogLevel.Info);
-            this.StartPathToTile(currentLoc, warpOrigin.Value, onEnd: null);
+
+            if (outOfBounds)
+            {
+                // Calculate in-map edge tile to approach.
+                int ax = Math.Max(0, Math.Min(width - 1, warp.X));
+                int ay = Math.Max(0, Math.Min(height - 1, warp.Y));
+                Point approach = new Point(ax, ay);
+
+                // Calculate out-of-bounds direction (Stardew: 0=Up,1=Right,2=Down,3=Left).
+                int dir =
+                    warp.X < 0 ? 3 :
+                    warp.X >= width ? 1 :
+                    warp.Y < 0 ? 0 : 2;
+
+                this._monitor.Log($"[Navigator] Step: {this.GetLocationKey(currentLoc)} -> {nextKey} via edge-warp ({warp.X},{warp.Y}). Approaching ({approach.X},{approach.Y}) then nudging dir={dir}.", LogLevel.Info);
+                this.StartPathToTile(currentLoc, approach, onEnd: () =>
+                {
+                    this._edgeNudgeDir = dir;
+                    this._edgeNudgeTicks = 20; // ~1/3 second should be enough to trigger Warped.
+                });
+            }
+            else
+            {
+                // Regular warp inside map bounds: walk to warp tile.
+                this._monitor.Log($"[Navigator] Step: {this.GetLocationKey(currentLoc)} -> {nextKey} via warp tile ({warp.X},{warp.Y})", LogLevel.Info);
+                this.StartPathToTile(currentLoc, warp, onEnd: null);
+            }
         }
 
         private void RetryCurrentStep()
