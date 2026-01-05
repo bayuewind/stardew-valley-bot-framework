@@ -1,0 +1,124 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{14680926-CF05-426A-BEAD-1E95981E405E}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>BotFramework</RootNamespace>
+    <AssemblyName>BotFramework</AssemblyName>
+    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <Deterministic>true</Deterministic>
+    <NuGetPackageImportStamp>
+    </NuGetPackageImportStamp>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>logo.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Microsoft.Build" />
+    <Reference Include="Microsoft.Build.Framework" />
+    <Reference Include="Microsoft.Build.Utilities.v4.0" />
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Actions\ActionCharacter.cs" />
+    <Compile Include="Actions\ActionObject.cs" />
+    <Compile Include="Actions\ActionTile.cs" />
+    <Compile Include="Bot.cs" />
+    <Compile Include="Actions\Action.cs" />
+    <Compile Include="Actions\IAction.cs" />
+    <Compile Include="Brain.cs" />
+    <Compile Include="Characters\ICharacterController.cs" />
+    <Compile Include="Characters\MovementController.cs" />
+    <Compile Include="Enums\ActionType.cs" />
+    <Compile Include="Enums\CallOrder.cs" />
+    <Compile Include="Enums\PostQuerySelector.cs" />
+    <Compile Include="Enums\QueryBehavior.cs" />
+    <Compile Include="Enums\UpdateBehavior.cs" />
+    <Compile Include="Helpers\LogProxy.cs" />
+    <Compile Include="Helpers\Distance.cs" />
+    <Compile Include="Locations\Group.cs" />
+    <Compile Include="Locations\IGroup.cs" />
+    <Compile Include="Locations\ILocationParser.cs" />
+    <Compile Include="Locations\IMap.cs" />
+    <Compile Include="Locations\ITile.cs" />
+    <Compile Include="Locations\LocationParser.cs" />
+    <Compile Include="Locations\LocationSearch.cs" />
+    <Compile Include="Locations\LocationTour.cs" />
+    <Compile Include="Locations\Map.cs" />
+    <Compile Include="Locations\Tile.cs" />
+    <Compile Include="Structures\Graph.cs" />
+    <Compile Include="Targets\PowerLevel.cs" />
+    <Compile Include="TemplateMethods\PathTemplate.cs" />
+    <Compile Include="TemplateMethods\SearchTemplate.cs" />
+    <Compile Include="Targets\TargetAction.cs" />
+    <Compile Include="Targets\TargetCharacter.cs" />
+    <Compile Include="Targets\ITarget.cs" />
+    <Compile Include="Targets\TargetObject.cs" />
+    <Compile Include="Targets\TargetTile.cs" />
+    <Compile Include="Targets\Target.cs" />
+    <Compile Include="WaterBotTest.cs" />
+    <Compile Include="World\IWorldParser.cs" />
+    <Compile Include="World\WorldParser.cs" />
+    <Compile Include="TemplateMethods\FillTemplate.cs" />
+    <Compile Include="TemplateMethods\TourTemplate.cs" />
+    <Compile Include="Characters\CharacterController.cs" />
+    <Compile Include="World\WorldPath.cs" />
+    <Compile Include="World\WorldTour.cs" />
+    <Compile Include="IBrain.cs" />
+    <Compile Include="IBot.cs" />
+    <Compile Include="API\IGMCMApi.cs" />
+    <Compile Include="ModConfig.cs" />
+    <Compile Include="ModEntry.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="manifest.json" />
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="logo.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Commands\" />
+    <Folder Include="i18n\" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <Import Project="..\packages\Pathoschild.Stardew.ModBuildConfig.3.2.2\build\Pathoschild.Stardew.ModBuildConfig.targets" Condition="Exists('..\packages\Pathoschild.Stardew.ModBuildConfig.3.2.2\build\Pathoschild.Stardew.ModBuildConfig.targets')" />
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\packages\Pathoschild.Stardew.ModBuildConfig.3.2.2\build\Pathoschild.Stardew.ModBuildConfig.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Pathoschild.Stardew.ModBuildConfig.3.2.2\build\Pathoschild.Stardew.ModBuildConfig.targets'))" />
+  </Target>
+</Project>
