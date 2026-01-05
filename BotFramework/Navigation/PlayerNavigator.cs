@@ -8,6 +8,7 @@ using StardewValley.Pathfinding;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using xTile.Dimensions;
 
 namespace BotFramework.Navigation
 {
@@ -275,7 +276,25 @@ namespace BotFramework.Navigation
 
             if (!warpOrigin.HasValue)
             {
-                this._monitor.Log($"[Navigator] No warp from '{this.GetLocationKey(currentLoc)}' to '{nextKey}'. Rebuilding route...", LogLevel.Warn);
+                // Fallback: try finding a Door/Action tile that leads to nextKey.
+                Point? doorTile = this.FindDoorTileByMapProperties(currentLoc, nextKey);
+                if (doorTile.HasValue)
+                {
+                    this._currentStepIsWarp = true;
+                    this._currentStepNextLocationKey = nextKey;
+                    this._currentStepRetryCount = 0;
+                    this._monitor.Log($"[Navigator] Step: {this.GetLocationKey(currentLoc)} -> {nextKey} via door tile ({doorTile.Value.X},{doorTile.Value.Y})", LogLevel.Info);
+
+                    // Walk to door tile, then trigger checkAction on the tile above it (the door itself).
+                    this.StartPathToTile(currentLoc, doorTile.Value, onEnd: () =>
+                    {
+                        Point doorActionTile = new Point(doorTile.Value.X, doorTile.Value.Y - 1);
+                        currentLoc.checkAction(new xTile.Dimensions.Location(doorActionTile.X * 64, doorActionTile.Y * 64), Game1.viewport, Game1.player);
+                    });
+                    return;
+                }
+
+                this._monitor.Log($"[Navigator] No warp or door from '{this.GetLocationKey(currentLoc)}' to '{nextKey}'. Rebuilding route...", LogLevel.Warn);
                 this._route = null;
                 return;
             }
@@ -543,6 +562,37 @@ namespace BotFramework.Navigation
                         q.Enqueue(nextKey);
                     }
                 }
+
+                // Also add door-based transitions to the graph.
+                foreach (string doorTarget in this.GetDoorTargetsByMapProperties(loc))
+                {
+                    string nextKey = doorTarget;
+                    if (string.IsNullOrEmpty(nextKey))
+                        continue;
+
+                    if (!nameToLoc.ContainsKey(nextKey))
+                    {
+                        GameLocation resolved = Utility.fuzzyLocationSearch(nextKey);
+                        if (resolved != null)
+                        {
+                            if (!string.IsNullOrEmpty(resolved.Name))
+                                nameToLoc[resolved.Name] = resolved;
+                            if (!string.IsNullOrEmpty(resolved.NameOrUniqueName))
+                                nameToLoc[resolved.NameOrUniqueName] = resolved;
+                            nextKey = this.GetLocationKey(resolved);
+                        }
+                    }
+
+                    if (!nameToLoc.ContainsKey(nextKey))
+                        continue;
+
+                    if (!visited.Contains(nextKey))
+                    {
+                        visited.Add(nextKey);
+                        prev[nextKey] = curKey;
+                        q.Enqueue(nextKey);
+                    }
+                }
             }
 
             if (!visited.Contains(toKey))
@@ -559,6 +609,98 @@ namespace BotFramework.Navigation
             }
             path.Reverse();
             return path;
+        }
+
+        // ==================== Door/Action-based transition support ====================
+
+        /// <summary>
+        /// Find a door tile (Action/TouchAction=Door) that leads to the target location.
+        /// Returns the "walk-to" tile (typically door tile + (0,1)).
+        /// </summary>
+        private Point? FindDoorTileByMapProperties(GameLocation location, string targetLocationKey)
+        {
+            var layers = new[] { "Buildings", "Front", "AlwaysFront", "Back" };
+            Point? best = null;
+            int bestDist = int.MaxValue;
+            Point playerTile = Game1.player.TilePoint;
+
+            foreach (var layerName in layers)
+            {
+                var layer = location.Map?.GetLayer(layerName);
+                if (layer == null) continue;
+
+                for (int x = 0; x < layer.LayerWidth; x++)
+                {
+                    for (int y = 0; y < layer.LayerHeight; y++)
+                    {
+                        string action = location.doesTileHaveProperty(x, y, "Action", layerName)
+                                      ?? location.doesTileHaveProperty(x, y, "TouchAction", layerName);
+                        if (string.IsNullOrEmpty(action) || !action.Contains("Door"))
+                            continue;
+
+                        string target = location.doesTileHaveProperty(x, y, "Target", layerName)
+                                      ?? location.doesTileHaveProperty(x, y, "Location", layerName)
+                                      ?? location.doesTileHaveProperty(x, y, "Destination", layerName);
+
+                        Point walkTile = new Point(x, y + 1); // Typically you stand below the door tile.
+
+                        if (!string.IsNullOrEmpty(target))
+                        {
+                            GameLocation tLoc = Game1.getLocationFromName(target);
+                            string tName = tLoc?.NameOrUniqueName ?? tLoc?.Name ?? target;
+                            if (this.KeysEqual(tName, targetLocationKey))
+                                return walkTile;
+                        }
+
+                        // Fallback: just pick the closest door if no explicit match.
+                        int dist = Math.Abs(playerTile.X - walkTile.X) + Math.Abs(playerTile.Y - walkTile.Y);
+                        if (dist < bestDist)
+                        {
+                            bestDist = dist;
+                            best = walkTile;
+                        }
+                    }
+                }
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// Get all door targets (for BFS graph construction).
+        /// </summary>
+        private IEnumerable<string> GetDoorTargetsByMapProperties(GameLocation location)
+        {
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var layers = new[] { "Buildings", "Front", "AlwaysFront", "Back" };
+
+            foreach (var layerName in layers)
+            {
+                var layer = location.Map?.GetLayer(layerName);
+                if (layer == null) continue;
+
+                for (int x = 0; x < layer.LayerWidth; x++)
+                {
+                    for (int y = 0; y < layer.LayerHeight; y++)
+                    {
+                        string action = location.doesTileHaveProperty(x, y, "Action", layerName)
+                                      ?? location.doesTileHaveProperty(x, y, "TouchAction", layerName);
+                        if (string.IsNullOrEmpty(action) || !action.Contains("Door"))
+                            continue;
+
+                        string target = location.doesTileHaveProperty(x, y, "Target", layerName)
+                                      ?? location.doesTileHaveProperty(x, y, "Location", layerName)
+                                      ?? location.doesTileHaveProperty(x, y, "Destination", layerName);
+
+                        if (!string.IsNullOrEmpty(target))
+                        {
+                            GameLocation tLoc = Game1.getLocationFromName(target);
+                            string tName = tLoc?.NameOrUniqueName ?? tLoc?.Name ?? target;
+                            result.Add(tName);
+                        }
+                    }
+                }
+            }
+            return result;
         }
     }
 }
