@@ -33,6 +33,7 @@ namespace BotFramework
             helper.ConsoleCommands.Add("bf_go_tile", "BotFramework: 导航到指定地点+tile。用法：bf_go_tile <locationName> <x> <y>", this.CmdGoTile);
             helper.ConsoleCommands.Add("bf_go_home", "BotFramework: 导航回家到床边。用法：bf_go_home", this.CmdGoHome);
             helper.ConsoleCommands.Add("bf_stop", "BotFramework: 停止导航。用法：bf_stop", this.CmdStop);
+            helper.ConsoleCommands.Add("bf_nav_debug", "BotFramework: 输出当前导航状态。用法：bf_nav_debug", this.CmdNavDebug);
         }
 
         private void onLaunched(object sender, GameLaunchedEventArgs e)
@@ -145,6 +146,16 @@ namespace BotFramework
             if (this._navigator == null)
                 return;
             this._navigator.Stop();
+        }
+
+        private void CmdNavDebug(string command, string[] args)
+        {
+            if (this._navigator == null)
+            {
+                this.Monitor.Log("Navigator 未初始化。", LogLevel.Info);
+                return;
+            }
+            this.Monitor.Log($"Navigator.IsNavigating={this._navigator.IsNavigating}, location={Game1.player.currentLocation?.NameOrUniqueName}, tile=({Game1.player.TilePoint.X},{Game1.player.TilePoint.Y}), controller={(Game1.player.controller == null ? "null" : Game1.player.controller.GetType().Name)}", LogLevel.Info);
         }
     }
 }

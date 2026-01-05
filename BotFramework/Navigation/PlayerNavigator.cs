@@ -29,6 +29,8 @@ namespace BotFramework.Navigation
         private int _finalFacingDirection;
 
         private Point? _currentStepTarget;
+        private bool _currentStepIsWarp;
+        private string _currentStepNextLocationKey;
         private int _stuckTicks;
         private Point _lastTile;
 
@@ -75,6 +77,8 @@ namespace BotFramework.Navigation
             this._finalFacingDirection = finalFacingDirection;
             this._active = true;
             this._currentStepTarget = null;
+            this._currentStepIsWarp = false;
+            this._currentStepNextLocationKey = null;
             this._stuckTicks = 0;
             this._lastTile = Game1.player.TilePoint;
 
@@ -109,6 +113,8 @@ namespace BotFramework.Navigation
             this._targetLocationKey = null;
             this._targetTile = null;
             this._currentStepTarget = null;
+            this._currentStepIsWarp = false;
+            this._currentStepNextLocationKey = null;
             this._stuckTicks = 0;
         }
 
@@ -130,7 +136,9 @@ namespace BotFramework.Navigation
             if (this.KeysEqual(this._route.Peek(), newKey))
             {
                 this._route.Dequeue();
-                this._monitor.Log($"[Navigator] Warped into {newKey}. Remaining hops: {this._route.Count}", LogLevel.Debug);
+                this._monitor.Log($"[Navigator] Warped into {newKey}. Remaining hops: {this._route.Count}", LogLevel.Info);
+                this._currentStepIsWarp = false;
+                this._currentStepNextLocationKey = null;
                 this.NavigateNextStep();
             }
         }
@@ -181,9 +189,9 @@ namespace BotFramework.Navigation
             // Retry if stuck for ~2 seconds (120 ticks).
             if (this._stuckTicks >= 120 && this._currentStepTarget.HasValue)
             {
-                this._monitor.Log($"[Navigator] Detected stuck near ({this._currentStepTarget.Value.X},{this._currentStepTarget.Value.Y}), retrying...", LogLevel.Warn);
+                this._monitor.Log($"[Navigator] Detected stuck near ({this._currentStepTarget.Value.X},{this._currentStepTarget.Value.Y}) (warpStep={this._currentStepIsWarp}), retrying...", LogLevel.Warn);
                 this._stuckTicks = 0;
-                this.RetryCurrentStepWithAlternateTile();
+                this.RetryCurrentStep();
             }
         }
 
@@ -198,6 +206,8 @@ namespace BotFramework.Navigation
             {
                 if (this._targetTile.HasValue)
                 {
+                    this._currentStepIsWarp = false;
+                    this._currentStepNextLocationKey = null;
                     this.StartPathToTile(Game1.player.currentLocation, this._targetTile.Value, onEnd: null);
                 }
                 return;
@@ -246,16 +256,27 @@ namespace BotFramework.Navigation
             // Some warps are triggered by walking *off the map boundary* (warp coords can be outside map bounds).
             // In those cases, clamping into the map will cause the player to stop one tile short and never warp.
             // So we intentionally use the raw warp coordinates here (matching the working behavior in your original code).
+            this._currentStepIsWarp = true;
+            this._currentStepNextLocationKey = nextKey;
+            this._monitor.Log($"[Navigator] Step: {this.GetLocationKey(currentLoc)} -> {nextKey} via warp tile ({warpOrigin.Value.X},{warpOrigin.Value.Y})", LogLevel.Info);
             this.StartPathToTile(currentLoc, warpOrigin.Value, onEnd: null);
         }
 
-        private void RetryCurrentStepWithAlternateTile()
+        private void RetryCurrentStep()
         {
             if (!this._currentStepTarget.HasValue)
                 return;
 
             GameLocation loc = Game1.player.currentLocation;
             Point origin = this._currentStepTarget.Value;
+
+            // For warp steps, do NOT "helpfully" choose a neighbor tile, or we can end up one tile short forever.
+            if (this._currentStepIsWarp)
+            {
+                this._monitor.Log($"[Navigator] Warp-step retry: re-path to warp tile ({origin.X},{origin.Y}) -> {this._currentStepNextLocationKey}", LogLevel.Warn);
+                this.StartPathToTile(loc, origin, onEnd: null);
+                return;
+            }
 
             foreach (Point candidate in this.GetNeighborCandidates(origin))
             {
