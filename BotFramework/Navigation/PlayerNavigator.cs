@@ -20,6 +20,7 @@ namespace BotFramework.Navigation
     public sealed class PlayerNavigator : IDisposable
     {
         public const string BuildTag = "player-navigator:v3";
+        private static readonly PathFindController.endBehavior NoopEndBehavior = () => { };
 
         private readonly IModHelper _helper;
         private readonly IMonitor _monitor;
@@ -302,7 +303,14 @@ namespace BotFramework.Navigation
                 return;
 
             this._currentStepTarget = targetTile;
-            Game1.player.controller = new PathFindController(Game1.player, location, targetTile, this._finalFacingDirection, onEnd);
+            // Match the working pattern from the user's original code:
+            // always provide a non-null end behavior delegate.
+            PathFindController.endBehavior endBehavior = onEnd ?? NoopEndBehavior;
+
+            // Clear any previous controller and stop current movement before assigning a new controller.
+            Game1.player.controller = null;
+            Game1.player.Halt();
+            Game1.player.controller = new PathFindController(Game1.player, location, targetTile, this._finalFacingDirection, endBehavior);
         }
 
         private Point GetBestBedTargetTile(FarmHouse home)
