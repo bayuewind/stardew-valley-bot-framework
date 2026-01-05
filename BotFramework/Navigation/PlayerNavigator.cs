@@ -34,6 +34,8 @@ namespace BotFramework.Navigation
         private Point? _currentStepTarget;
         private bool _currentStepIsWarp;
         private string _currentStepNextLocationKey;
+        private int _currentStepRetryCount;
+        private const int MaxRetriesPerStep = 5;
         private int _stuckTicks;
         private Point _lastTile;
 
@@ -83,6 +85,7 @@ namespace BotFramework.Navigation
             this._currentStepTarget = null;
             this._currentStepIsWarp = false;
             this._currentStepNextLocationKey = null;
+            this._currentStepRetryCount = 0;
             this._stuckTicks = 0;
             this._lastTile = Game1.player.TilePoint;
 
@@ -119,6 +122,7 @@ namespace BotFramework.Navigation
             this._currentStepTarget = null;
             this._currentStepIsWarp = false;
             this._currentStepNextLocationKey = null;
+            this._currentStepRetryCount = 0;
             this._stuckTicks = 0;
         }
 
@@ -212,6 +216,7 @@ namespace BotFramework.Navigation
                 {
                     this._currentStepIsWarp = false;
                     this._currentStepNextLocationKey = null;
+                    this._currentStepRetryCount = 0;
                     this.StartPathToTile(Game1.player.currentLocation, this._targetTile.Value, onEnd: null);
                 }
                 return;
@@ -262,6 +267,7 @@ namespace BotFramework.Navigation
             // So we intentionally use the raw warp coordinates here (matching the working behavior in your original code).
             this._currentStepIsWarp = true;
             this._currentStepNextLocationKey = nextKey;
+            this._currentStepRetryCount = 0;
             this._monitor.Log($"[Navigator] Step: {this.GetLocationKey(currentLoc)} -> {nextKey} via warp tile ({warpOrigin.Value.X},{warpOrigin.Value.Y})", LogLevel.Info);
             this.StartPathToTile(currentLoc, warpOrigin.Value, onEnd: null);
         }
@@ -274,27 +280,25 @@ namespace BotFramework.Navigation
             GameLocation loc = Game1.player.currentLocation;
             Point origin = this._currentStepTarget.Value;
 
-            // For warp steps, do NOT "helpfully" choose a neighbor tile, or we can end up one tile short forever.
-            if (this._currentStepIsWarp)
+            this._currentStepRetryCount++;
+            if (this._currentStepRetryCount > MaxRetriesPerStep)
             {
-                this._monitor.Log($"[Navigator] Warp-step retry: re-path to warp tile ({origin.X},{origin.Y}) -> {this._currentStepNextLocationKey}", LogLevel.Warn);
-                this.StartPathToTile(loc, origin, onEnd: null);
+                this._monitor.Log($"[Navigator] Step retry limit exceeded ({MaxRetriesPerStep}). Stopping navigation to avoid jitter.", LogLevel.Error);
+                this.Stop();
                 return;
             }
 
-            foreach (Point candidate in this.GetNeighborCandidates(origin))
+            // Match the user's original behavior: never "wander" to neighbor tiles.
+            // Always retry pathing to the same target tile.
+            if (this._currentStepIsWarp)
             {
-                if (candidate == origin)
-                    continue;
-                if (this.IsTilePassable(loc, candidate))
-                {
-                    this.StartPathToTile(loc, candidate, onEnd: null);
-                    return;
-                }
+                this._monitor.Log($"[Navigator] Warp-step retry {this._currentStepRetryCount}/{MaxRetriesPerStep}: re-path to warp tile ({origin.X},{origin.Y}) -> {this._currentStepNextLocationKey}", LogLevel.Warn);
             }
-
-            // Give up on alternate tile; try recompute route.
-            this._route = null;
+            else
+            {
+                this._monitor.Log($"[Navigator] Step retry {this._currentStepRetryCount}/{MaxRetriesPerStep}: re-path to tile ({origin.X},{origin.Y})", LogLevel.Warn);
+            }
+            this.StartPathToTile(loc, origin, onEnd: null);
         }
 
         private void StartPathToTile(GameLocation location, Point targetTile, PathFindController.endBehavior onEnd)
