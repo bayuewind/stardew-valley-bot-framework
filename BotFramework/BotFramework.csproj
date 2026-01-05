@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="manifest.json" />
+    <None Include="manifest.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="logo.ico" />
   </ItemGroup>
 
