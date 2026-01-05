@@ -19,6 +19,8 @@ namespace BotFramework.Navigation
     /// </summary>
     public sealed class PlayerNavigator : IDisposable
     {
+        public const string BuildTag = "player-navigator:v3";
+
         private readonly IModHelper _helper;
         private readonly IMonitor _monitor;
 
@@ -29,6 +31,8 @@ namespace BotFramework.Navigation
         private int _finalFacingDirection;
 
         private Point? _currentStepTarget;
+        private bool _currentStepIsWarp;
+        private string _currentStepNextLocationKey;
         private int _stuckTicks;
         private Point _lastTile;
 
@@ -39,6 +43,7 @@ namespace BotFramework.Navigation
             this._helper = helper ?? throw new ArgumentNullException(nameof(helper));
             this._monitor = monitor ?? throw new ArgumentNullException(nameof(monitor));
 
+            this._monitor.Log($"[Navigator] Init ({BuildTag})", LogLevel.Info);
             helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
             helper.Events.Player.Warped += this.OnWarped;
         }
@@ -75,6 +80,8 @@ namespace BotFramework.Navigation
             this._finalFacingDirection = finalFacingDirection;
             this._active = true;
             this._currentStepTarget = null;
+            this._currentStepIsWarp = false;
+            this._currentStepNextLocationKey = null;
             this._stuckTicks = 0;
             this._lastTile = Game1.player.TilePoint;
 
@@ -109,6 +116,8 @@ namespace BotFramework.Navigation
             this._targetLocationKey = null;
             this._targetTile = null;
             this._currentStepTarget = null;
+            this._currentStepIsWarp = false;
+            this._currentStepNextLocationKey = null;
             this._stuckTicks = 0;
         }
 
@@ -130,7 +139,9 @@ namespace BotFramework.Navigation
             if (this.KeysEqual(this._route.Peek(), newKey))
             {
                 this._route.Dequeue();
-                this._monitor.Log($"[Navigator] Warped into {newKey}. Remaining hops: {this._route.Count}", LogLevel.Debug);
+                this._monitor.Log($"[Navigator] Warped into {newKey}. Remaining hops: {this._route.Count}", LogLevel.Info);
+                this._currentStepIsWarp = false;
+                this._currentStepNextLocationKey = null;
                 this.NavigateNextStep();
             }
         }
@@ -181,9 +192,9 @@ namespace BotFramework.Navigation
             // Retry if stuck for ~2 seconds (120 ticks).
             if (this._stuckTicks >= 120 && this._currentStepTarget.HasValue)
             {
-                this._monitor.Log($"[Navigator] Detected stuck near ({this._currentStepTarget.Value.X},{this._currentStepTarget.Value.Y}), retrying...", LogLevel.Warn);
+                this._monitor.Log($"[Navigator] Detected stuck near ({this._currentStepTarget.Value.X},{this._currentStepTarget.Value.Y}) (warpStep={this._currentStepIsWarp}), retrying...", LogLevel.Warn);
                 this._stuckTicks = 0;
-                this.RetryCurrentStepWithAlternateTile();
+                this.RetryCurrentStep();
             }
         }
 
@@ -198,6 +209,8 @@ namespace BotFramework.Navigation
             {
                 if (this._targetTile.HasValue)
                 {
+                    this._currentStepIsWarp = false;
+                    this._currentStepNextLocationKey = null;
                     this.StartPathToTile(Game1.player.currentLocation, this._targetTile.Value, onEnd: null);
                 }
                 return;
@@ -242,19 +255,31 @@ namespace BotFramework.Navigation
                 return;
             }
 
-            // IMPORTANT: To trigger a warp, we need to step onto the warp tile itself.
-            // Some warps can be on map boundaries; clamp to a valid tile index.
-            Point warpTarget = this.ClampToMap(currentLoc, warpOrigin.Value);
-            this.StartPathToTile(currentLoc, warpTarget, onEnd: null);
+            // IMPORTANT:
+            // Some warps are triggered by walking *off the map boundary* (warp coords can be outside map bounds).
+            // In those cases, clamping into the map will cause the player to stop one tile short and never warp.
+            // So we intentionally use the raw warp coordinates here (matching the working behavior in your original code).
+            this._currentStepIsWarp = true;
+            this._currentStepNextLocationKey = nextKey;
+            this._monitor.Log($"[Navigator] Step: {this.GetLocationKey(currentLoc)} -> {nextKey} via warp tile ({warpOrigin.Value.X},{warpOrigin.Value.Y})", LogLevel.Info);
+            this.StartPathToTile(currentLoc, warpOrigin.Value, onEnd: null);
         }
 
-        private void RetryCurrentStepWithAlternateTile()
+        private void RetryCurrentStep()
         {
             if (!this._currentStepTarget.HasValue)
                 return;
 
             GameLocation loc = Game1.player.currentLocation;
             Point origin = this._currentStepTarget.Value;
+
+            // For warp steps, do NOT "helpfully" choose a neighbor tile, or we can end up one tile short forever.
+            if (this._currentStepIsWarp)
+            {
+                this._monitor.Log($"[Navigator] Warp-step retry: re-path to warp tile ({origin.X},{origin.Y}) -> {this._currentStepNextLocationKey}", LogLevel.Warn);
+                this.StartPathToTile(loc, origin, onEnd: null);
+                return;
+            }
 
             foreach (Point candidate in this.GetNeighborCandidates(origin))
             {
@@ -326,25 +351,6 @@ namespace BotFramework.Navigation
                     return candidate;
             }
             return origin;
-        }
-
-        private Point ClampToMap(GameLocation location, Point tile)
-        {
-            if (location?.Map?.Layers == null || location.Map.Layers.Count == 0)
-                return new Point(Math.Max(0, tile.X), Math.Max(0, tile.Y));
-
-            int width = location.Map.Layers[0].LayerWidth;
-            int height = location.Map.Layers[0].LayerHeight;
-
-            int x = tile.X;
-            int y = tile.Y;
-
-            if (x < 0) x = 0;
-            if (y < 0) y = 0;
-            if (width > 0 && x >= width) x = width - 1;
-            if (height > 0 && y >= height) y = height - 1;
-
-            return new Point(x, y);
         }
 
         private IEnumerable<Point> GetNeighborCandidates(Point p)
