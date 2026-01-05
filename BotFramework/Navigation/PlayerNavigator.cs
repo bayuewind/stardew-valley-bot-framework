@@ -242,10 +242,11 @@ namespace BotFramework.Navigation
                 return;
             }
 
-            // IMPORTANT: To trigger a warp, we need to step onto the warp tile itself.
-            // Some warps can be on map boundaries; clamp to a valid tile index.
-            Point warpTarget = this.ClampToMap(currentLoc, warpOrigin.Value);
-            this.StartPathToTile(currentLoc, warpTarget, onEnd: null);
+            // IMPORTANT:
+            // Some warps are triggered by walking *off the map boundary* (warp coords can be outside map bounds).
+            // In those cases, clamping into the map will cause the player to stop one tile short and never warp.
+            // So we intentionally use the raw warp coordinates here (matching the working behavior in your original code).
+            this.StartPathToTile(currentLoc, warpOrigin.Value, onEnd: null);
         }
 
         private void RetryCurrentStepWithAlternateTile()
@@ -326,25 +327,6 @@ namespace BotFramework.Navigation
                     return candidate;
             }
             return origin;
-        }
-
-        private Point ClampToMap(GameLocation location, Point tile)
-        {
-            if (location?.Map?.Layers == null || location.Map.Layers.Count == 0)
-                return new Point(Math.Max(0, tile.X), Math.Max(0, tile.Y));
-
-            int width = location.Map.Layers[0].LayerWidth;
-            int height = location.Map.Layers[0].LayerHeight;
-
-            int x = tile.X;
-            int y = tile.Y;
-
-            if (x < 0) x = 0;
-            if (y < 0) y = 0;
-            if (width > 0 && x >= width) x = width - 1;
-            if (height > 0 && y >= height) y = height - 1;
-
-            return new Point(x, y);
         }
 
         private IEnumerable<Point> GetNeighborCandidates(Point p)
